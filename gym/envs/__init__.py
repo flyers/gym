@@ -1,5 +1,13 @@
 from gym.envs.registration import registry, register, make, spec
 
+register(
+    id='VREP-v0',
+    entry_point='gym.envs.vrep:VREPEnv',
+    timestep_limit=1000,
+    nondeterministic=False,
+    kwargs={'remote_port': 20000, 'obs_type': 'state'},
+)
+
 # Algorithmic
 # ----------------------------------------
 
