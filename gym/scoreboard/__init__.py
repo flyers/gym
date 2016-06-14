@@ -22,7 +22,23 @@ web_base = os.environ.get('OPENAI_GYM_WEB_BASE', 'https://gym.openai.com')
 # this repository.
 
 # groups
-
+add_group(
+    id='vrep',
+    name='vrep control',
+    description='self defined control problem in the VREP simulator',
+)
+# vrep task
+add_task(
+    id='VREP-v0',
+    group='vrep',
+    summary='control a quadcopter',
+    description="""\
+    Control the quadcopter to follow a moving target.
+    """,
+    background="""\
+    self defined task
+    """,
+)
 add_group(
     id='classic_control',
     name='Classic control',
