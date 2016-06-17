@@ -145,7 +145,7 @@ class VREPEnv(gym.Env):
     def _act(self, action):
         # send control signal to server side
         vrep.simxSetStringSignal(self.client_id, 'thrust',
-                                     vrep.simxPackFloats(action), vrep.simx_opmode_oneshot)
+                                 vrep.simxPackFloats(action), vrep.simx_opmode_oneshot)
         # trigger next simulation step
         vrep.simxSynchronousTrigger(self.client_id)
         # read sensor
@@ -161,10 +161,6 @@ class VREPEnv(gym.Env):
                or self.quadcopter_pos[2] <= 0 or self.quadcopter_pos[2] >= 5 \
                or abs(self.quadcopter_orientation[0]) >= 1 \
                or abs(self.quadcopter_orientation[1]) >= 1
-        # print self.observation_space.contains(self._get_state())
-        # print self.quadcopter_pos
-        # print self.quadcopter_orientation
-        # print 'game over:', done
         return done
 
     def __init__(self, remote_port=19997, frame_skip=1, obs_type='state'):
@@ -179,8 +175,6 @@ class VREPEnv(gym.Env):
 
         if self.client_id == -1:
             raise error.Error('Failed connecting to remote API server')
-        # enable the synchronous mode on the client
-        vrep.simxSynchronous(self.client_id, True)
 
         # set action bound
         self.action_space = spaces.Box(low=-1., high=1., shape=(4,))
@@ -206,6 +200,8 @@ class VREPEnv(gym.Env):
         # init sensor reading
         self._init_sensor()
 
+        # enable the synchronous mode on the client
+        vrep.simxSynchronous(self.client_id, True)
         # start the simulation, in blocking mode
         vrep.simxStartSimulation(self.client_id, vrep.simx_opmode_oneshot_wait)
 
