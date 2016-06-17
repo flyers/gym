@@ -167,13 +167,12 @@ class VREPEnv(gym.Env):
         # print 'game over:', done
         return done
 
-
     def __init__(self, remote_port=19997, frame_skip=1, obs_type='state'):
         self.frame_skip = frame_skip
         self.remote_port = remote_port
         self._obs_type = obs_type
 
-        self.client_id = vrep.simxStart('127.0.0.1', 19997, True, True, 5000, 5)
+        self.client_id = vrep.simxStart('127.0.0.1', remote_port, True, True, 5000, 5)
         self._goal = numpy.array([0., 0., 0.4])
 
         self.viewer = None
