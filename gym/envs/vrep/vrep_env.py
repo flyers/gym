@@ -3,6 +3,10 @@ import math
 import gym
 from gym import spaces, error
 import numpy
+import subprocess
+import os
+import signal
+import time
 
 try:
     from gym.envs.vrep import vrep
@@ -41,6 +45,25 @@ class VREPEnv(gym.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array']
     }
+    def _init_server(self):
+        vrep_cmd = os.path.join(self.vrep_path,'vrep')
+        vrep_arg = ' -gREMOTEAPISERVERSERVICE_'+str(self.remote_port)+'_FALSE_TRUE '
+        execute_cmd = vrep_cmd + vrep_arg + self.scene_path + '&'
+        print 'vrep command:%s' % execute_cmd
+        self.server_process = subprocess.Popen(execute_cmd, shell=True,
+                                               stdout=subprocess.PIPE,
+                                               stderr=subprocess.PIPE)
+        self.server_process.wait()
+        print 'server launch result:', self.server_process.poll()
+        if self.server_process.poll() != 0:
+            raise ValueError('vrep server launching failed')
+
+    def _close(self):
+        # close the vrep server process, whose pid is the parent pid plus 1
+        try:
+            os.kill(self.server_process.pid+1, signal.SIGKILL)
+        except OSError:
+            print 'Process does not exist'
 
     def _init_handle(self):
         # get object handles
@@ -163,12 +186,24 @@ class VREPEnv(gym.Env):
                or abs(self.quadcopter_orientation[1]) >= 1
         return done
 
-    def __init__(self, remote_port=19997, frame_skip=1, obs_type='state'):
+    def __init__(self, frame_skip=1, obs_type='state',
+                 vrep_path='/home/sliay/Documents/V-REP_PRO_EDU_V3_3_1_64_Linux',
+                 scene_path='/home/sliay/Dropbox/Documents/Phd/UAVControl/simulator/quadcopter_control_arena.ttt'):
         self.frame_skip = frame_skip
-        self.remote_port = remote_port
         self._obs_type = obs_type
+        self.vrep_path = vrep_path
+        self.scene_path = scene_path
+        self.server_process = None
 
-        self.client_id = vrep.simxStart('127.0.0.1', remote_port, True, True, 5000, 5)
+        # find an unoccupied port
+        self.remote_port = 20000
+        while vrep.simxStart('127.0.0.1', self.remote_port, True, True, 5000, 5) != -1:
+            self.remote_port += 1
+        # start a remote vrep server on this port
+        self._init_server()
+        time.sleep(5)
+        # now try to connect the server
+        self.client_id = vrep.simxStart('127.0.0.1', self.remote_port, True, True, 5000, 5)
         self._goal = numpy.array([0., 0., 0.4])
 
         self.viewer = None
