@@ -11,10 +11,12 @@ import time
 try:
     from gym.envs.vrep import vrep
 except ImportError as e:
-    raise error.DependencyNotInstalled("{}. (HINT: you need to perform the setup instructions here: http://www.coppeliarobotics.com/helpFiles/en/remoteApiClientSide.htm.)".format(e))
-
+    raise error.DependencyNotInstalled(
+        "{}. (HINT: you need to perform the setup instructions here: http://www.coppeliarobotics.com/helpFiles/en/remoteApiClientSide.htm.)".format(
+            e))
 
 logger = logging.getLogger(__name__)
+
 
 def quad2mat(q):
     mat = numpy.zeros((3, 3), dtype='float32')
@@ -41,21 +43,23 @@ def quad2mat(q):
 
     return mat
 
+
 # TODO, here there is a bug that the vrep server will crash with the progress of the env
 class VREPEnv(gym.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array']
     }
+
     def _init_server(self):
         vrep_cmd = os.path.join(self.vrep_path, 'vrep')
         if self.headless:
             vrep_cmd += ' -h'
-        vrep_arg = ' -gREMOTEAPISERVERSERVICE_'+str(self.remote_port)+'_FALSE_TRUE '
+        vrep_arg = ' -gREMOTEAPISERVERSERVICE_' + str(self.remote_port) + '_FALSE_TRUE '
         execute_cmd = vrep_cmd + vrep_arg + self.scene_path + '&'
         logger.info('vrep launching command:%s' % execute_cmd)
         self.server_process = subprocess.Popen(execute_cmd, shell=True,
-                                               # stdout=subprocess.PIPE,
-                                               # stderr=subprocess.PIPE
+                                               stdout=subprocess.PIPE,
+                                               stderr=subprocess.PIPE
                                                )
         self.server_process.wait()
         logger.info(self.server_process.pid)
@@ -66,7 +70,7 @@ class VREPEnv(gym.Env):
     def _init_handle(self):
         # get object handles
         _, self.quadcopter_handle = vrep.simxGetObjectHandle(
-            self.client_id, 'Quadricopter_base',vrep.simx_opmode_oneshot_wait)
+            self.client_id, 'Quadricopter_base', vrep.simx_opmode_oneshot_wait)
         _, self.target_handle = vrep.simxGetObjectHandle(
             self.client_id, 'Bill', vrep.simx_opmode_oneshot_wait)
         _, self.camera_handle = vrep.simxGetObjectHandle(
@@ -97,7 +101,8 @@ class VREPEnv(gym.Env):
             self.client_id, 'angular_variations', vrep.simx_opmode_streaming)
         self.quadcopter_angular_variation = vrep.simxUnpackFloats(
             self.quadcopter_angular_variation)
-        _, self.quadcopter_quaternion = vrep.simxGetStringSignal(self.client_id, 'quaternion', vrep.simx_opmode_streaming)
+        _, self.quadcopter_quaternion = vrep.simxGetStringSignal(self.client_id, 'quaternion',
+                                                                 vrep.simx_opmode_streaming)
         self.quadcopter_quaternion = vrep.simxUnpackFloats(
             self.quadcopter_quaternion)
 
@@ -172,9 +177,29 @@ class VREPEnv(gym.Env):
         # read sensor
         self._read_sensor()
         # get reward
-        # TODO, adjust reward setting
+        # in general, the reward should consider both the target location and the quadcopter state
         reward = 0.0
-        reward += numpy.exp(-numpy.sum((self.target_coordinates - self._goal)**2))
+        # for target location, we set a goal with respect to [cx, cy, h], where cx,cy \in [-0.5, 0.5], h \in [0, 1].
+        # Note that cx, cy changes faster than h when the quadcopter moves its view,
+        # we should give more penalty weights on h than on cx,cy
+        location_reward = numpy.exp(-numpy.sum(
+            ((self.target_coordinates - self._goal_target) * [1, 1, 3]) ** 2
+        ))
+        tmp = ((self.target_coordinates - self._goal_target) * [1, 1, 3]) ** 2
+        # print tmp
+        # print numpy.exp(-tmp)
+        # for quadcopter, we want to keep the quadcopter at some altitude level
+        altitude_reward = numpy.exp(-(self._goal_height - self.quadcopter_pos[2])**2)
+        # also, we want the stabilize the quadcopter by restrciting the angular velocity
+        stabilize_reward = 0.5
+        if abs(self.angular_velocity_b[0]) > self._w_boundary or abs(self.angular_velocity_b[1]) > self._w_boundary:
+            stabilize_reward = -0.5
+        reward = location_reward + altitude_reward + stabilize_reward
+        # print 'target coordinates:', self.target_coordinates
+        # print 'location reward:', location_reward
+        # print 'altitude reward:', altitude_reward
+        # print 'stabilize reward:', stabilize_reward
+        # print 'total reward:', reward
         return reward
 
     def _game_over(self):
@@ -202,10 +227,13 @@ class VREPEnv(gym.Env):
         # start a remote vrep server on this port
         self._init_server()
         # wait for the server initialization
-        time.sleep(6)
+        time.sleep(8)
         # now try to connect the server
         self.client_id = vrep.simxStart('127.0.0.1', self.remote_port, True, True, 5000, 5)
-        self._goal = numpy.array([0., 0., 0.4])
+        self._goal_target = numpy.array([0., 0., 0.4])
+        self._goal_height = 1.50
+        self._w_boundary = 0.3
+
 
         self.viewer = None
 
@@ -234,13 +262,13 @@ class VREPEnv(gym.Env):
         start_time = time.time()
         self._init_handle()
         end_time = time.time()
-        logger.info('init handle time:%f' % (end_time-start_time))
+        logger.info('init handle time:%f' % (end_time - start_time))
 
         # init sensor reading
         start_time = time.time()
         self._init_sensor()
         end_time = time.time()
-        logger.info('init read buffer time:%f' % (end_time-start_time))
+        logger.info('init read buffer time:%f' % (end_time - start_time))
 
         # enable the synchronous mode on the client
         vrep.simxSynchronous(self.client_id, True)
@@ -282,7 +310,7 @@ class VREPEnv(gym.Env):
     def _close(self):
         # close the vrep server process, whose pid is the parent pid plus 1
         try:
-            os.kill(self.server_process.pid+1, signal.SIGKILL)
+            os.kill(self.server_process.pid + 1, signal.SIGKILL)
         except OSError:
             logger.info('Process does not exist')
 
@@ -304,8 +332,8 @@ class VREPEnv(gym.Env):
         # for scale, we only consider the height information and ignore the width
         cx = self.target_back_pos[0] / self.target_back_pos[2]
         y_top = self.target_neck_pos[1] / self.target_neck_pos[2]
-        y_bottom = (self.target_leftfoot_pos[1]/self.target_leftfoot_pos[2] +
-                    self.target_rightfoot_pos[1]/self.target_rightfoot_pos[2]) / 2.0
+        y_bottom = (self.target_leftfoot_pos[1] / self.target_leftfoot_pos[2] +
+                    self.target_rightfoot_pos[1] / self.target_rightfoot_pos[2]) / 2.0
         h = abs(y_bottom - y_top)
         cy = (y_bottom + y_top) / 2.0
         self.target_coordinates = numpy.array([cx, cy, h])
@@ -317,4 +345,3 @@ class VREPEnv(gym.Env):
         scaled_action = lb + (action + 1.) * 0.5 * (ub - lb)
         scaled_action = numpy.clip(scaled_action, lb, ub)
         return scaled_action
-

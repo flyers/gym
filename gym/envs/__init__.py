@@ -3,10 +3,19 @@ from gym.envs.registration import registry, register, make, spec
 register(
     id='VREP-v0',
     entry_point='gym.envs.vrep:VREPEnv',
-    timestep_limit=1000,
+    timestep_limit=10000,
     nondeterministic=False,
-    kwargs={'remote_port': 20000, 'obs_type': 'state'},
+    kwargs={'obs_type': 'state',
+            'headless': False},
 )
+
+# register(
+#     id='VREPTest-v0',
+#     entry_point='gym.envs.vrep:VREPTestEnv',
+#     timestep_limit=10000,
+#     nondeterministic=False,
+#     kwargs={'obs_type': 'state'},
+# )
 
 # Algorithmic
 # ----------------------------------------

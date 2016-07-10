@@ -39,6 +39,18 @@ add_task(
     self defined task
     """,
 )
+# add_task(
+#     id='VREPTest-v0',
+#     group='vrep',
+#     summary='control a quadcopter',
+#     description="""\
+#     Control the quadcopter to follow a moving target.
+#     """,
+#     background="""\
+#     self defined task
+#     """,
+# )
+
 add_group(
     id='classic_control',
     name='Classic control',
