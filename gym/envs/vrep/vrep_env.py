@@ -105,6 +105,9 @@ class VREPEnv(gym.Env):
                                                                  vrep.simx_opmode_streaming)
         self.quadcopter_quaternion = vrep.simxUnpackFloats(
             self.quadcopter_quaternion)
+        _, self.quadcopter_accel = vrep.simxGetStringSignal(self.client_id, 'accelerations',
+                                                        vrep.simx_opmode_streaming)
+        self.quadcopter_accel = vrep.simxUnpackFloats(self.quadcopter_accel)
 
         _, self.target_neck_pos = vrep.simxGetObjectPosition(
             self.client_id, self.target_neck, self.camera_handle, vrep.simx_opmode_streaming)
@@ -134,6 +137,9 @@ class VREPEnv(gym.Env):
         _, self.quadcopter_quaternion = vrep.simxGetStringSignal(self.client_id, 'quaternion', vrep.simx_opmode_buffer)
         self.quadcopter_quaternion = vrep.simxUnpackFloats(
             self.quadcopter_quaternion)
+        _, self.quadcopter_accel = vrep.simxGetStringSignal(self.client_id, 'accelerations',
+                                                            vrep.simx_opmode_buffer)
+        self.quadcopter_accel = vrep.simxUnpackFloats(self.quadcopter_accel)
 
         self.angular_velocity_b = self.quadcopter_angular_variation
         mat = quad2mat(self.quadcopter_quaternion)
@@ -187,19 +193,20 @@ class VREPEnv(gym.Env):
         ))
         tmp = ((self.target_coordinates - self._goal_target) * [1, 1, 3]) ** 2
         # print tmp
-        # print numpy.exp(-tmp)
         # for quadcopter, we want to keep the quadcopter at some altitude level
-        altitude_reward = numpy.exp(-(self._goal_height - self.quadcopter_pos[2])**2)
+        altitude_reward = 0
+        if self.quadcopter_pos[2] >= self._height_boundary[1] or self.quadcopter_pos[2] <= self._height_boundary[0]:
+            altitude_reward = -1.0
         # also, we want the stabilize the quadcopter by restrciting the angular velocity
-        stabilize_reward = 0.5
+        stabilize_reward = 0
         if abs(self.angular_velocity_b[0]) > self._w_boundary or abs(self.angular_velocity_b[1]) > self._w_boundary:
-            stabilize_reward = -0.5
+            stabilize_reward = -1.0
         reward = location_reward + altitude_reward + stabilize_reward
-        # print 'target coordinates:', self.target_coordinates
-        # print 'location reward:', location_reward
-        # print 'altitude reward:', altitude_reward
-        # print 'stabilize reward:', stabilize_reward
-        # print 'total reward:', reward
+        print 'target coordinates:', self.target_coordinates
+        print 'location reward:', location_reward
+        print 'altitude reward:', altitude_reward
+        print 'stabilize reward:', stabilize_reward
+        print 'total reward:', reward
         return reward
 
     def _game_over(self):
@@ -231,7 +238,7 @@ class VREPEnv(gym.Env):
         # now try to connect the server
         self.client_id = vrep.simxStart('127.0.0.1', self.remote_port, True, True, 5000, 5)
         self._goal_target = numpy.array([0., 0., 0.4])
-        self._goal_height = 1.50
+        self._height_boundary = [1.20, 1.80]
         self._w_boundary = 0.3
 
 
