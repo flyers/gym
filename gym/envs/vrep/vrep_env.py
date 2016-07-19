@@ -218,7 +218,7 @@ class VREPEnv(gym.Env):
 
     def __init__(self, frame_skip=1, obs_type='state',
                  vrep_path='/home/sliay/Documents/V-REP_PRO_EDU_V3_3_1_64_Linux',
-                 scene_path='/home/sliay/Dropbox/Documents/Phd/UAVControl/simulator/quadcopter_control_arena.ttt',
+                 scene_path='/home/sliay/Documents/vrep-uav/scenes/quadcopter_control.ttt',
                  headless=True):
         self.frame_skip = frame_skip
         self._obs_type = obs_type
