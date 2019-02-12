@@ -1,118 +1,17 @@
 import logging
 import numpy
 from gym import error, spaces
-from gym.envs.vrep.vrep_base import VREPBaseEnv
+from .vrep_base import VREPBaseEnv
+from . import config
 
 try:
-    from gym.envs.vrep import vrep
+    from . import vrep
 except ImportError as e:
     raise error.DependencyNotInstalled(
         "{}. (HINT: you need to perform the setup instructions here: http://www.coppeliarobotics.com/helpFiles/en/remoteApiClientSide.htm.)".format(
             e))
 
 logger = logging.getLogger(__name__)
-
-AVAILABLE_ACTION_1 = numpy.array([
-    [1, 1, 1, 1],
-    [-1, 1, 1, 1],
-    [1, -1, 1, 1],
-    [-1, -1, 1, 1],
-    [1, 1, -1, 1],
-    [-1, 1, -1, 1],
-    [1, -1, -1, 1],
-    [-1, -1, -1, 1],
-    [1, 1, 1, -1],
-    [-1, 1, 1, -1],
-    [1, -1, 1, -1],
-    [-1, -1, 1, -1],
-    [1, 1, -1, -1],
-    [-1, 1, -1, -1],
-    [1, -1, -1, -1],
-    [-1, -1, -1, -1],
-])
-AVAILABLE_ACTION_2 = numpy.array([
-    [0, 0, 0, 0],
-    [0, 0, 0, 1],
-    [0, 0, 0, -1],
-    [0, 0, 1, 0],
-    [0, 0, 1, 1],
-    [0, 0, 1, -1],
-    [0, 0, -1, 0],
-    [0, 0, -1, 1],
-    [0, 0, -1, -1],
-    [0, 1, 0, 0],
-    [0, 1, 0, 1],
-    [0, 1, 0, -1],
-    [0, 1, 1, 0],
-    [0, 1, 1, 1],
-    [0, 1, 1, -1],
-    [0, 1, -1, 0],
-    [0, 1, -1, 1],
-    [0, 1, -1, -1],
-    [0, -1, 0, 0],
-    [0, -1, 0, 1],
-    [0, -1, 0, -1],
-    [0, -1, 1, 0],
-    [0, -1, 1, 1],
-    [0, -1, 1, -1],
-    [0, -1, -1, 0],
-    [0, -1, -1, 1],
-    [0, -1, -1, -1],
-    [1, 0, 0, 0],
-    [1, 0, 0, 1],
-    [1, 0, 0, -1],
-    [1, 0, 1, 0],
-    [1, 0, 1, 1],
-    [1, 0, 1, -1],
-    [1, 0, -1, 0],
-    [1, 0, -1, 1],
-    [1, 0, -1, -1],
-    [1, 1, 0, 0],
-    [1, 1, 0, 1],
-    [1, 1, 0, -1],
-    [1, 1, 1, 0],
-    [1, 1, 1, 1],
-    [1, 1, 1, -1],
-    [1, 1, -1, 0],
-    [1, 1, -1, 1],
-    [1, 1, -1, -1],
-    [1, -1, 0, 0],
-    [1, -1, 0, 1],
-    [1, -1, 0, -1],
-    [1, -1, 1, 0],
-    [1, -1, 1, 1],
-    [1, -1, 1, -1],
-    [1, -1, -1, 0],
-    [1, -1, -1, 1],
-    [1, -1, -1, -1],
-    [-1, 0, 0, 0],
-    [-1, 0, 0, 1],
-    [-1, 0, 0, -1],
-    [-1, 0, 1, 0],
-    [-1, 0, 1, 1],
-    [-1, 0, 1, -1],
-    [-1, 0, -1, 0],
-    [-1, 0, -1, 1],
-    [-1, 0, -1, -1],
-    [-1, 1, 0, 0],
-    [-1, 1, 0, 1],
-    [-1, 1, 0, -1],
-    [-1, 1, 1, 0],
-    [-1, 1, 1, 1],
-    [-1, 1, 1, -1],
-    [-1, 1, -1, 0],
-    [-1, 1, -1, 1],
-    [-1, 1, -1, -1],
-    [-1, -1, 0, 0],
-    [-1, -1, 0, 1],
-    [-1, -1, 0, -1],
-    [-1, -1, 1, 0],
-    [-1, -1, 1, 1],
-    [-1, -1, 1, -1],
-    [-1, -1, -1, 0],
-    [-1, -1, -1, 1],
-    [-1, -1, -1, -1],
-    ])
 
 
 def goal_func_3(delta, thres):
@@ -139,6 +38,7 @@ class VREPHierarchyTargetEnv(VREPBaseEnv):
 
     def _init_sensor(self):
         super(VREPHierarchyTargetEnv, self)._init_sensor()
+        # enable streaming of state values and the observation image, this will slow the simulator speed
         if self._obs_type == 'image':
             _, self.resolution, self.image = vrep.simxGetVisionSensorImage(
                 self.client_id, self.camera_handle, 0, vrep.simx_opmode_streaming)
@@ -412,9 +312,9 @@ class VREPHierarchyTargetEnv(VREPBaseEnv):
             # self._action_granularity = numpy.array([0.01, 0.01, 0.01, 0.01])
             self._action_granularity = 0.02
             if self._discrete_type == 0:
-                self.AVAILABLE_ACTION = AVAILABLE_ACTION_2 * self._action_granularity
+                self.AVAILABLE_ACTION = config.AVAILABLE_ACTION_2 * self._action_granularity
             else:
-                self.AVAILABLE_ACTION = AVAILABLE_ACTION_1 * self._action_granularity
+                self.AVAILABLE_ACTION = config.AVAILABLE_ACTION_1 * self._action_granularity
             self.action_space = spaces.Discrete(self.AVAILABLE_ACTION.shape[0])
         state_bound = numpy.array([4, 4, 4] + [4, 4, 4] + # v, w
                                   # [4, 4, 4] + [4, 4, 4] + # a_v, a_w

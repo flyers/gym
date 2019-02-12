@@ -1,10 +1,10 @@
 import logging
 import numpy
 from gym import error, spaces
-from gym.envs.vrep.vrep_base import VREPBaseEnv
+from .vrep_base import VREPBaseEnv
 
 try:
-    from gym.envs.vrep import vrep
+    from . import vrep
 except ImportError as e:
     raise error.DependencyNotInstalled(
         "{}. (HINT: you need to perform the setup instructions here: http://www.coppeliarobotics.com/helpFiles/en/remoteApiClientSide.htm.)".format(

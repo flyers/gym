@@ -1,118 +1,17 @@
 import logging
 import numpy
 from gym import error, spaces
-from gym.envs.vrep.vrep_base import VREPBaseEnv
+from .vrep_base import VREPBaseEnv
+from . import config
 
 try:
-    from gym.envs.vrep import vrep
+    from . import vrep
 except ImportError as e:
     raise error.DependencyNotInstalled(
         "{}. (HINT: you need to perform the setup instructions here: http://www.coppeliarobotics.com/helpFiles/en/remoteApiClientSide.htm.)".format(
             e))
 
 logger = logging.getLogger(__name__)
-
-AVAILABLE_ACTION_1 = numpy.array([
-    [1, 1, 1, 1],
-    [-1, 1, 1, 1],
-    [1, -1, 1, 1],
-    [-1, -1, 1, 1],
-    [1, 1, -1, 1],
-    [-1, 1, -1, 1],
-    [1, -1, -1, 1],
-    [-1, -1, -1, 1],
-    [1, 1, 1, -1],
-    [-1, 1, 1, -1],
-    [1, -1, 1, -1],
-    [-1, -1, 1, -1],
-    [1, 1, -1, -1],
-    [-1, 1, -1, -1],
-    [1, -1, -1, -1],
-    [-1, -1, -1, -1],
-])
-AVAILABLE_ACTION_2 = numpy.array([
-    [0, 0, 0, 0],
-    [0, 0, 0, 1],
-    [0, 0, 0, -1],
-    [0, 0, 1, 0],
-    [0, 0, 1, 1],
-    [0, 0, 1, -1],
-    [0, 0, -1, 0],
-    [0, 0, -1, 1],
-    [0, 0, -1, -1],
-    [0, 1, 0, 0],
-    [0, 1, 0, 1],
-    [0, 1, 0, -1],
-    [0, 1, 1, 0],
-    [0, 1, 1, 1],
-    [0, 1, 1, -1],
-    [0, 1, -1, 0],
-    [0, 1, -1, 1],
-    [0, 1, -1, -1],
-    [0, -1, 0, 0],
-    [0, -1, 0, 1],
-    [0, -1, 0, -1],
-    [0, -1, 1, 0],
-    [0, -1, 1, 1],
-    [0, -1, 1, -1],
-    [0, -1, -1, 0],
-    [0, -1, -1, 1],
-    [0, -1, -1, -1],
-    [1, 0, 0, 0],
-    [1, 0, 0, 1],
-    [1, 0, 0, -1],
-    [1, 0, 1, 0],
-    [1, 0, 1, 1],
-    [1, 0, 1, -1],
-    [1, 0, -1, 0],
-    [1, 0, -1, 1],
-    [1, 0, -1, -1],
-    [1, 1, 0, 0],
-    [1, 1, 0, 1],
-    [1, 1, 0, -1],
-    [1, 1, 1, 0],
-    [1, 1, 1, 1],
-    [1, 1, 1, -1],
-    [1, 1, -1, 0],
-    [1, 1, -1, 1],
-    [1, 1, -1, -1],
-    [1, -1, 0, 0],
-    [1, -1, 0, 1],
-    [1, -1, 0, -1],
-    [1, -1, 1, 0],
-    [1, -1, 1, 1],
-    [1, -1, 1, -1],
-    [1, -1, -1, 0],
-    [1, -1, -1, 1],
-    [1, -1, -1, -1],
-    [-1, 0, 0, 0],
-    [-1, 0, 0, 1],
-    [-1, 0, 0, -1],
-    [-1, 0, 1, 0],
-    [-1, 0, 1, 1],
-    [-1, 0, 1, -1],
-    [-1, 0, -1, 0],
-    [-1, 0, -1, 1],
-    [-1, 0, -1, -1],
-    [-1, 1, 0, 0],
-    [-1, 1, 0, 1],
-    [-1, 1, 0, -1],
-    [-1, 1, 1, 0],
-    [-1, 1, 1, 1],
-    [-1, 1, 1, -1],
-    [-1, 1, -1, 0],
-    [-1, 1, -1, 1],
-    [-1, 1, -1, -1],
-    [-1, -1, 0, 0],
-    [-1, -1, 0, 1],
-    [-1, -1, 0, -1],
-    [-1, -1, 1, 0],
-    [-1, -1, 1, 1],
-    [-1, -1, 1, -1],
-    [-1, -1, -1, 0],
-    [-1, -1, -1, 1],
-    [-1, -1, -1, -1],
-    ])
 
 
 class VREPHierarchyEnv(VREPBaseEnv):
@@ -152,10 +51,12 @@ class VREPHierarchyEnv(VREPBaseEnv):
             v = self.linear_velocity_b
             w = self.angular_velocity_b
         reward_p = \
-            numpy.exp(-numpy.square(self.quadcopter_pos[2] - self._goal_height))
+            numpy.exp(-numpy.square(
+                self.quadcopter_pos[2] - self._goal_height))
         # p_baseline = numpy.exp(-numpy.square([0.2]))
         reward_q = \
-            numpy.exp(-numpy.square(self.quadcopter_quaternion - numpy.array([0, 0, 1, 0])).sum())
+            numpy.exp(-numpy.square(self.quadcopter_quaternion -
+                                    numpy.array([0, 0, 1, 0])).sum())
         # q_baseline = numpy.exp(-numpy.square([0.3, 0.3, 0.3, 0.3]).sum())
         reward_v = \
             numpy.exp(-numpy.square(numpy.array(v) - [1, 0, 0]).sum())
@@ -181,12 +82,11 @@ class VREPHierarchyEnv(VREPBaseEnv):
             )
         return numpy.asscalar(reward)
 
-
     def _game_over(self):
         done = (not self.state_space.contains(self._get_state())) \
-               or self.quadcopter_pos[2] <= 0 or self.quadcopter_pos[2] >= 5 \
-               or abs(self.quadcopter_orientation[0]) >= numpy.pi/3 \
-               or abs(self.quadcopter_orientation[1]) >= numpy.pi/3
+            or self.quadcopter_pos[2] <= 0 or self.quadcopter_pos[2] >= 5 \
+            or abs(self.quadcopter_orientation[0]) >= numpy.pi/3 \
+            or abs(self.quadcopter_orientation[1]) >= numpy.pi/3
         return done
 
     def __init__(self,
@@ -213,22 +113,25 @@ class VREPHierarchyEnv(VREPBaseEnv):
             # self._action_granularity = numpy.array([0.01, 0.01, 0.01, 0.01])
             self._action_granularity = 0.02
             if self._discrete_type == 0:
-                self.AVAILABLE_ACTION = AVAILABLE_ACTION_2 * self._action_granularity
+                self.AVAILABLE_ACTION = config.AVAILABLE_ACTION_2 * self._action_granularity
             else:
-                self.AVAILABLE_ACTION = AVAILABLE_ACTION_1 * self._action_granularity
+                self.AVAILABLE_ACTION = config.AVAILABLE_ACTION_1 * self._action_granularity
             self.action_space = spaces.Discrete(self.AVAILABLE_ACTION.shape[0])
-        state_bound = numpy.array([4, 4, 4] + [4, 4, 4] + # v, w
+        state_bound = numpy.array([4, 4, 4] + [4, 4, 4] +  # v, w
                                   # [4, 4, 4] + [4, 4, 4] + # a_v, a_w
                                   [numpy.inf, numpy.inf, numpy.inf] +  # position
                                   [1, 1, 1, 1]  # quaternion
                                   )
         self.state_space = spaces.Box(low=-state_bound, high=state_bound)
         if self._obs_type == 'image':
-            self.observation_space = spaces.Box(low=0, high=255, shape=(3, 128, 128))
+            self.observation_space = spaces.Box(
+                low=0, high=255, shape=(3, 128, 128))
         elif self._obs_type == 'state':
-            self.observation_space = spaces.Box(low=-state_bound, high=state_bound)
+            self.observation_space = spaces.Box(
+                low=-state_bound, high=state_bound)
         else:
-            raise error.Error('Unrecognized observation type: {}'.format(self._obs_type))
+            raise error.Error(
+                'Unrecognized observation type: {}'.format(self._obs_type))
 
     def _step(self, a):
         reward = 0.0

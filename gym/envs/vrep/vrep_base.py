@@ -6,10 +6,10 @@ import subprocess
 import os
 import signal
 import time
-from transformations import euler_from_quaternion
+from .transformations import euler_from_quaternion
 
 try:
-    from gym.envs.vrep import vrep
+    from . import vrep
 except ImportError as e:
     raise error.DependencyNotInstalled(
         "{}. (HINT: you need to perform the setup instructions here: http://www.coppeliarobotics.com/helpFiles/en/remoteApiClientSide.htm.)".format(
@@ -54,7 +54,8 @@ class VREPBaseEnv(gym.Env):
         vrep_cmd = os.path.join(self.vrep_path, 'vrep')
         if self.headless:
             vrep_cmd += ' -h'
-        vrep_arg = ' -gREMOTEAPISERVERSERVICE_' + str(self.remote_port) + '_FALSE_TRUE '
+        vrep_arg = ' -gREMOTEAPISERVERSERVICE_' + \
+            str(self.remote_port) + '_FALSE_TRUE '
         execute_cmd = vrep_cmd + vrep_arg + self.scene_path + '&'
         logger.info('vrep launching command:%s' % execute_cmd)
         if not self.server_silent:
@@ -66,7 +67,8 @@ class VREPBaseEnv(gym.Env):
                                                    )
         self.server_process.wait()
         logger.info(self.server_process.pid)
-        logger.info('server launch return code:%s' % self.server_process.poll())
+        logger.info('server launch return code:%s' %
+                    self.server_process.poll())
         if self.server_process.poll() != 0:
             raise ValueError('vrep server launching failed')
 
@@ -90,15 +92,10 @@ class VREPBaseEnv(gym.Env):
             self.client_id, 'Mark_RightFoot', vrep.simx_opmode_oneshot_wait)
 
     def _init_sensor(self):
-        # enable streaming of state values and the observation image
-        # _, self.resolution, self.image = vrep.simxGetVisionSensorImage(
-        #     self.client_id, self.camera_handle, 0, vrep.simx_opmode_streaming)
         _, self.linear_velocity_g, self.angular_velocity_g = vrep.simxGetObjectVelocity(
             self.client_id, self.quadcopter_handle, vrep.simx_opmode_streaming)
         _, self.quadcopter_pos = vrep.simxGetObjectPosition(
             self.client_id, self.quadcopter_handle, -1, vrep.simx_opmode_streaming)
-        # _, self.quadcopter_orientation = vrep.simxGetObjectOrientation(
-        #     self.client_id, self.quadcopter_handle, -1, vrep.simx_opmode_streaming)
         _, self.target_pos = vrep.simxGetObjectPosition(
             self.client_id, self.target_handle, -1, vrep.simx_opmode_streaming)
 
@@ -126,14 +123,10 @@ class VREPBaseEnv(gym.Env):
         self.last_angular_velocity_b = numpy.zeros(3)
 
     def _read_sensor(self):
-        # self._read_camera_image()
-
         _, self.linear_velocity_g, self.angular_velocity_g = vrep.simxGetObjectVelocity(
             self.client_id, self.quadcopter_handle, vrep.simx_opmode_buffer)
         _, self.quadcopter_pos = vrep.simxGetObjectPosition(
             self.client_id, self.quadcopter_handle, -1, vrep.simx_opmode_buffer)
-        # _, self.quadcopter_orientation = vrep.simxGetObjectOrientation(
-        #     self.client_id, self.quadcopter_handle, -1, vrep.simx_opmode_buffer)
         _, self.target_pos = vrep.simxGetObjectPosition(
             self.client_id, self.target_handle, -1, vrep.simx_opmode_buffer)
 
@@ -141,11 +134,12 @@ class VREPBaseEnv(gym.Env):
             self.client_id, 'angular_variations', vrep.simx_opmode_buffer)
         self.quadcopter_angular_variation = vrep.simxUnpackFloats(
             self.quadcopter_angular_variation)
-        _, self.quadcopter_quaternion = vrep.simxGetStringSignal(self.client_id, 'quaternion', vrep.simx_opmode_buffer)
+        _, self.quadcopter_quaternion = vrep.simxGetStringSignal(
+            self.client_id, 'quaternion', vrep.simx_opmode_buffer)
         self.quadcopter_quaternion = vrep.simxUnpackFloats(
             self.quadcopter_quaternion)
-        self.quadcopter_orientation = list(euler_from_quaternion(self.quadcopter_quaternion, 'rxyz'))
-        # self.quadcopter_quaternion = quaternion_from_euler(-self.quadcopter_orientation[0], -self.quadcopter_orientation[1], self.quadcopter_orientation[2])
+        self.quadcopter_orientation = list(
+            euler_from_quaternion(self.quadcopter_quaternion, 'rxyz'))
 
         self.angular_velocity_b = self.quadcopter_angular_variation
         mat = quad2mat(self.quadcopter_quaternion)
@@ -162,10 +156,14 @@ class VREPBaseEnv(gym.Env):
 
         self._get_track_coordinates()
 
-        self.linear_accel_g = (self.linear_velocity_g - self.last_linear_velocity_g) / 0.05
-        self.linear_accel_b = (self.linear_velocity_b - self.last_linear_velocity_b) / 0.05
-        self.angular_accel_g = (self.angular_velocity_g - self.last_angular_velocity_g) / 0.05
-        self.angular_accel_b = (self.angular_velocity_b - self.last_angular_velocity_b) / 0.05
+        self.linear_accel_g = (self.linear_velocity_g -
+                               self.last_linear_velocity_g) / self.delta_t
+        self.linear_accel_b = (self.linear_velocity_b -
+                               self.last_linear_velocity_b) / self.delta_t
+        self.angular_accel_g = (
+            self.angular_velocity_g - self.last_angular_velocity_g) / self.delta_t
+        self.angular_accel_b = (
+            self.angular_velocity_b - self.last_angular_velocity_b) / self.delta_t
         self.last_linear_velocity_g = numpy.array(self.linear_velocity_g)
         self.last_linear_velocity_b = numpy.array(self.linear_velocity_b)
         self.last_angular_velocity_g = numpy.array(self.angular_velocity_g)
@@ -177,7 +175,8 @@ class VREPBaseEnv(gym.Env):
         elif self._obs_type == 'state':
             return self._get_state()
         else:
-            raise error.Error('Unrecognized observation type: {}'.format(self._obs_type))
+            raise error.Error(
+                'Unrecognized observation type: {}'.format(self._obs_type))
 
     def _get_image(self):
         raise NotImplementedError
@@ -192,12 +191,14 @@ class VREPBaseEnv(gym.Env):
         raise NotImplementedError
 
     def __init__(self, frame_skip=1, timestep_limit=500,
-                 obs_type='state', state_type='world',
-                 vrep_path='/home/sliay/Documents/V-REP_PRO_EDU_V3_3_1_64_Linux',
+                 obs_type='state', state_type='body',
+                 vrep_path='/home/sliay/V-REP_PRO_EDU_V3_3_2_64_Linux',
                  headless=True, random_start=False,
+                 simulation_timestep=0.05,
                  server_silent=False):
         self.frame_skip = frame_skip
         self.timestep_limit = timestep_limit
+        self.delta_t = simulation_timestep
 
         self._obs_type = obs_type
         # state type indicates the state variable is in world-frame or in body-frame
@@ -218,11 +219,13 @@ class VREPBaseEnv(gym.Env):
         # wait for the server initialization
         time.sleep(8)
         # now try to connect the server
-        self.client_id = vrep.simxStart('127.0.0.1', self.remote_port, True, True, 5000, 5)
+        self.client_id = vrep.simxStart(
+            '127.0.0.1', self.remote_port, True, True, 5000, 5)
         if self.client_id == -1:
             raise error.Error('Failed connecting to remote API server')
 
         self.viewer = None
+        self.image = None
 
     def _reset(self):
         assert self.client_id != -1
@@ -251,17 +254,21 @@ class VREPBaseEnv(gym.Env):
             a = numpy.array([-5, -5, 1])
             b = numpy.array([5, 5, 2])
             start_pos = numpy.random.random_sample(3) * (b - a) + a
-            vrep.simxSetObjectPosition(self.client_id, self.main_handle, -1, start_pos, vrep.simx_opmode_oneshot_wait)
+            vrep.simxSetObjectPosition(
+                self.client_id, self.main_handle, -1, start_pos, vrep.simx_opmode_oneshot_wait)
             # set random orientation
             yaw = numpy.random.random_sample() * 2 * numpy.pi - numpy.pi
-            vrep.simxSetObjectOrientation(self.client_id, self.main_handle, -1, [0, 0, yaw], vrep.simx_opmode_oneshot_wait)
+            vrep.simxSetObjectOrientation(
+                self.client_id, self.main_handle, -1, [0, 0, yaw], vrep.simx_opmode_oneshot_wait)
             # set relative distance between target and quadcopter
             ta = numpy.random.uniform(low=2.5, high=6)
             tb = numpy.random.uniform(low=-ta/3, high=ta/3)
-            vrep.simxSetObjectPosition(self.client_id, self.target_handle, self.quadcopter_handle, [ta, tb, -start_pos[2]], vrep.simx_opmode_oneshot_wait)
+            vrep.simxSetObjectPosition(self.client_id, self.target_handle, self.quadcopter_handle, [
+                                       ta, tb, -start_pos[2]], vrep.simx_opmode_oneshot_wait)
             # set target orientation
             t_yaw = numpy.random.random_sample() * 2 * numpy.pi - numpy.pi
-            vrep.simxSetObjectOrientation(self.client_id, self.target_handle, self.quadcopter_handle, [0, 0, t_yaw], vrep.simx_opmode_oneshot_wait)
+            vrep.simxSetObjectOrientation(self.client_id, self.target_handle, self.quadcopter_handle, [
+                                          0, 0, t_yaw], vrep.simx_opmode_oneshot_wait)
 
         # trigger several simulation steps for api initialization
         for i in range(2):
@@ -279,6 +286,8 @@ class VREPBaseEnv(gym.Env):
             if self.viewer is not None:
                 self.viewer.close()
                 self.viewer = None
+            return
+        if self._obs_type == 'state':
             return
         img = self.image
         if mode == 'rgb_array':
@@ -301,7 +310,8 @@ class VREPBaseEnv(gym.Env):
         _, self.resolution, self.image = vrep.simxGetVisionSensorImage(
             self.client_id, self.camera_handle, 0, vrep.simx_opmode_buffer)
         # image shape is height by width by 3
-        self.image = numpy.array(self.image).reshape((self.resolution[1], self.resolution[0], 3))
+        self.image = numpy.array(self.image).reshape(
+            (self.resolution[1], self.resolution[0], 3))
         self.image = numpy.flipud(self.image)
         index = numpy.zeros(self.image.shape, dtype=self.image.dtype)
         index[self.image < 0] = 1
@@ -319,4 +329,3 @@ class VREPBaseEnv(gym.Env):
         h = abs(y_bottom - y_top)
         cy = (y_bottom + y_top) / 2.0
         self.target_coordinates = numpy.array([cx, cy, h])
-
