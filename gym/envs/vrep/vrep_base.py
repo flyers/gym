@@ -262,7 +262,7 @@ class VREPBaseEnv(gym.Env):
                 self.client_id, self.main_handle, -1, [0, 0, yaw], vrep.simx_opmode_oneshot_wait)
             # set relative distance between target and quadcopter
             ta = numpy.random.uniform(low=2.5, high=6)
-            tb = numpy.random.uniform(low=-ta/3, high=ta/3)
+            tb = numpy.random.uniform(low=-ta / 3, high=ta / 3)
             vrep.simxSetObjectPosition(self.client_id, self.target_handle, self.quadcopter_handle, [
                                        ta, tb, -start_pos[2]], vrep.simx_opmode_oneshot_wait)
             # set target orientation
