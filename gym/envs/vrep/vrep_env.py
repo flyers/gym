@@ -71,7 +71,7 @@ class VREPEnv(VREPBaseEnv):
         state = numpy.concatenate(self.states)
         if self._action_history_length > 0:
             action = numpy.concatenate(self.actions)
-            return numpy.concatenate(state, action)
+            return numpy.concatenate([state, action])
         else:
             return state
 
@@ -132,6 +132,34 @@ class VREPEnv(VREPBaseEnv):
 
         return reward
 
+    def eval_reward_1(self, action):
+        if self._game_over():
+            reward = -10.0
+        else:
+            r_coord = goal_func_3(
+                self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
+            r_scale = goal_func_3(
+                self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+            r_orientation = aux_func(numpy.array(
+                self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
+            r_height = aux_func(
+                self.quadcopter_pos[2] - self._goal_height, 0.5) * 0.5
+            reward = r_coord + r_scale + r_orientation + r_height
+            if self._log:
+                logger.info(
+                    'TargetLoc_x Reward:%.4f\nTargetLoc_y Reward:%.4f\nTargetLoc_h Reward:%.4f\nTargetPos Reward:%.4f\nW Reward:%f\nTotal Reward:%.4f\n' %
+                    (
+                        r_coord,
+                        r_coord,
+                        r_scale,
+                        r_height,
+                        r_orientation,
+                        reward,
+                    )
+                )
+
+        return reward
+
     def _game_over(self):
         done = (not self.state_space.contains(self._get_state())) \
             or self.quadcopter_pos[2] <= 0 or self.quadcopter_pos[2] >= 5 \
@@ -144,7 +172,7 @@ class VREPEnv(VREPBaseEnv):
         for _ in range(self._state_history_length):
             self.states.append(obs)
         for _ in range(self._action_history_length):
-            self.actions.append(np.zeros(self.action_space.shape))
+            self.actions.append(numpy.zeros(self.action_space.shape))
         return self._concat_state()
 
     def _step(self, a):
