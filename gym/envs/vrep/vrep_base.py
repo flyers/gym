@@ -191,7 +191,7 @@ class VREPBaseEnv(gym.Env):
         raise NotImplementedError
 
     def __init__(self, frame_skip=1, timestep_limit=500,
-                 obs_type='state', state_type='body',
+                 obs_type='state', state_type='body', include_goal=False,
                  vrep_path='/home/sliay/V-REP_PRO_EDU_V3_3_2_64_Linux',
                  headless=True, random_start=False,
                  simulation_timestep=0.05,
@@ -203,6 +203,7 @@ class VREPBaseEnv(gym.Env):
         self._obs_type = obs_type
         # state type indicates the state variable is in world-frame or in body-frame
         self._state_type = state_type
+        self.include_goal = include_goal
 
         self.vrep_path = vrep_path
         self.headless = headless
@@ -329,3 +330,5 @@ class VREPBaseEnv(gym.Env):
         h = abs(y_bottom - y_top)
         cy = (y_bottom + y_top) / 2.0
         self.target_coordinates = numpy.array([cx, cy, h])
+        if self.include_goal:
+            self.target_coordinates -= self._goal_target

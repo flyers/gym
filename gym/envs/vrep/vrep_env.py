@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class VREPEnv(VREPBaseEnv):
     def __init__(self,
                  scene_path='/home/sliay/Documents/vrep-uav/scenes/quadcopter_hierarchy_64x64.ttt',
-                 reward_func=0, log=False, action_type='continuous', discrete_type=0,
+                 reward_func=0, log=False, action_type='continuous', discrete_type=0, goal_height=0.4,
                  action_bound=0.025, state_history_length=1, action_history_length=0,
                  future_action_length=1,
                  **kwargs):
@@ -29,13 +29,16 @@ class VREPEnv(VREPBaseEnv):
         self._action_type = action_type
         self._discrete_type = discrete_type
         self._goal_height = 1.5
-        self._goal_target = numpy.array([0., 0., 0.4])
+        # self._goal_target = numpy.array([0., 0., 0.4])
+        self._goal_target = numpy.array([0., 0., goal_height])
 
         super(VREPEnv, self).__init__(**kwargs)
 
         # set action bound
+        self._future_action_length = future_action_length
         if self._action_type == 'continuous':
-            self.action_space = spaces.Box(low=-1., high=1., shape=(4,))
+            self.action_space = spaces.Box(
+                low=-1., high=1., shape=(4 * future_action_length,))
             self._action_lb = -1 * action_bound
             self._action_ub = action_bound
         else:
@@ -56,11 +59,10 @@ class VREPEnv(VREPBaseEnv):
 
         self._state_history_length = state_history_length
         self._action_history_length = action_history_length
-        self._future_action_length = future_action_length
         self.states = deque([], maxlen=self._state_history_length)
         self.actions = deque([], maxlen=self._action_history_length)
         state_ub = self.state_space.high.tolist()
-        action_ub = self.action_space.high.tolist()
+        action_ub = self.action_space.high.tolist()[0:4]
         observation_bound = state_ub * self._state_history_length + \
             action_ub * self._action_history_length
         observation_bound = numpy.array(observation_bound)
@@ -92,24 +94,29 @@ class VREPEnv(VREPBaseEnv):
                                dtype='float32')
 
     def _act(self, action):
-        # send control signal to server side
-        vrep.simxSetStringSignal(self.client_id, 'control_signal',
-                                 vrep.simxPackFloats(action), vrep.simx_opmode_oneshot)
-        # trigger next simulation step
-        vrep.simxSynchronousTrigger(self.client_id)
+        for k in range(self._future_action_length):
+            a = action[k * 4:(k + 1) * 4]
+            # send control signal to server side
+            vrep.simxSetStringSignal(self.client_id, 'control_signal',
+                                     vrep.simxPackFloats(a), vrep.simx_opmode_oneshot)
+            # trigger next simulation step
+            vrep.simxSynchronousTrigger(self.client_id)
         # read sensor
         self._read_sensor()
 
-        eval_str = 'self.eval_reward_' + str(self._reward_func) + '(action)'
+        eval_str = 'self.eval_reward_' + \
+            str(self._reward_func) + '(action)'
         return eval(eval_str)
 
     def eval_reward_0(self, action):
         if self._game_over():
             return -10.0
-        r_coord = goal_func_3(
-            self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
-        r_scale = goal_func_3(
-            self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        r_coord = goal_func_3(self.target_coordinates[:2], [0.1, 0.25])
+        r_scale = goal_func_3(self.target_coordinates[2], [0.05, 0.2])
+        # r_coord = goal_func_3(
+        #     self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
+        # r_scale = goal_func_3(
+        #     self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
         r_orientation = aux_func(numpy.array(
             self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
         r_height = aux_func(
@@ -129,16 +136,28 @@ class VREPEnv(VREPBaseEnv):
             )
         return reward
 
+    def goal_reward(self):
+        if self.include_goal:
+            r_coord = goal_func_3(self.target_coordinates[:2], [0.1, 0.25])
+            r_scale = goal_func_3(self.target_coordinates[2], [0.05, 0.2])
+        else:
+            r_coord = goal_func_3(
+                self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
+            r_scale = goal_func_3(
+                self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        return r_coord, r_scale
+
     def eval_reward_1(self, action):
         """
         Add penalty for large actions 
         """
         if self._game_over():
             return -10.0
-        r_coord = goal_func_3(
-            self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
-        r_scale = goal_func_3(
-            self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        r_coord, r_scale = self.goal_reward()
+        # r_coord = goal_func_3(
+        #     self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
+        # r_scale = goal_func_3(
+        #     self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
         r_orientation = aux_func(numpy.array(
             self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
         r_height = aux_func(
@@ -165,10 +184,7 @@ class VREPEnv(VREPBaseEnv):
         """
         if self._game_over():
             return -10.0
-        r_coord = goal_func_3(
-            self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
-        r_scale = goal_func_3(
-            self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        r_coord, r_scale = self.goal_reward()
         r_orientation = aux_func(numpy.array(
             self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
         r_height = aux_func(
@@ -195,10 +211,7 @@ class VREPEnv(VREPBaseEnv):
         """
         if self._game_over():
             return -10.0
-        r_coord = goal_func_3(
-            self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
-        r_scale = goal_func_3(
-            self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        r_coord, r_scale = self.goal_reward()
         r_orientation = aux_func(numpy.array(
             self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
         r_height = aux_func(
@@ -225,10 +238,7 @@ class VREPEnv(VREPBaseEnv):
         """
         if self._game_over():
             return -10.0
-        r_coord = goal_func_3(
-            self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
-        r_scale = goal_func_3(
-            self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        r_coord, r_scale = self.goal_reward()
         r_orientation = aux_func(numpy.array(
             self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
         r_height = aux_func(
@@ -257,10 +267,7 @@ class VREPEnv(VREPBaseEnv):
         """
         if self._game_over():
             return -10.0
-        r_coord = goal_func_3(
-            self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
-        r_scale = goal_func_3(
-            self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        r_coord, r_scale = self.goal_reward()
         r_orientation = aux_func(numpy.array(
             self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
         r_height = aux_func(
@@ -289,10 +296,7 @@ class VREPEnv(VREPBaseEnv):
         """
         if self._game_over():
             return -10.0
-        r_coord = goal_func_3(
-            self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
-        r_scale = goal_func_3(
-            self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        r_coord, r_scale = self.goal_reward()
         r_orientation = aux_func(numpy.array(
             self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
         r_height = aux_func(
@@ -321,10 +325,7 @@ class VREPEnv(VREPBaseEnv):
         """
         if self._game_over():
             return -10.0
-        r_coord = goal_func_3(
-            self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
-        r_scale = goal_func_3(
-            self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        r_coord, r_scale = self.goal_reward()
         r_orientation = aux_func(numpy.array(
             self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
         r_height = aux_func(
@@ -354,19 +355,166 @@ class VREPEnv(VREPBaseEnv):
         """
         if self._game_over():
             return -10.0
-        r_coord = goal_func_3(
-            self.target_coordinates[:2] - self._goal_target[:2], [0.1, 0.25])
-        r_scale = goal_func_3(
-            self.target_coordinates[2] - self._goal_target[2], [0.05, 0.2])
+        r_coord, r_scale = self.goal_reward()
         r_orientation = aux_func(numpy.array(
             self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
         r_height = aux_func(
             self.quadcopter_pos[2] - self._goal_height, 0.5) * 0.5
-        r_action = aux_func(action, 0.1)        
+        r_action = aux_func(action, 0.1)
         past_actions = numpy.array(self.actions)
         delta_actions = past_actions[1::] - past_actions[0:-1]
         r_action_delta = aux_func(delta_actions, 0.1) * 0.5
-        reward = r_coord + r_scale + r_orientation + r_height + r_action + r_action_delta
+        reward = r_coord + r_scale + r_orientation + \
+            r_height + r_action + r_action_delta
+        if self._log:
+            logger.info(
+                'TargetLoc_x Reward:%.4f\nTargetLoc_y Reward:%.4f\nTargetLoc_h Reward:%.4f\nTargetPos Reward:%.4f\nW Reward:%f\nTotal Reward:%.4f\n' %
+                (
+                    r_coord,
+                    r_coord,
+                    r_scale,
+                    r_height,
+                    r_orientation,
+                    reward,
+                )
+            )
+        return reward
+
+    def eval_reward_9(self, action):
+        """
+        Add penalty for large action variations 
+        """
+        if self._game_over():
+            return -10.0
+        r_coord, r_scale = self.goal_reward()
+        r_orientation = aux_func(numpy.array(
+            self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
+        r_height = aux_func(
+            self.quadcopter_pos[2] - self._goal_height, 0.5) * 0.5
+        past_actions = numpy.array(action).reshape(self._future_action_length, 4)
+        delta_actions = past_actions[1::] - past_actions[0:-1]
+        r_action = aux_func(delta_actions, 0.5) * 0.5
+        reward = r_coord + r_scale + r_orientation + r_height + r_action
+        if self._log:
+            logger.info(
+                'TargetLoc_x Reward:%.4f\nTargetLoc_y Reward:%.4f\nTargetLoc_h Reward:%.4f\nTargetPos Reward:%.4f\nW Reward:%f\nTotal Reward:%.4f\n' %
+                (
+                    r_coord,
+                    r_coord,
+                    r_scale,
+                    r_height,
+                    r_orientation,
+                    reward,
+                )
+            )
+        return reward
+
+    def eval_reward_10(self, action):
+        """
+        Add penalty for large action variations 
+        """
+        if self._game_over():
+            return -10.0
+        r_coord, r_scale = self.goal_reward()
+        r_orientation = aux_func(numpy.array(
+            self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
+        r_height = aux_func(
+            self.quadcopter_pos[2] - self._goal_height, 0.5) * 0.5
+        past_actions = numpy.array(action).reshape(self._future_action_length, 4)
+        delta_actions = past_actions[1::] - past_actions[0:-1]
+        r_action = aux_func(delta_actions, 0.3) * 0.5
+        reward = r_coord + r_scale + r_orientation + r_height + r_action
+        if self._log:
+            logger.info(
+                'TargetLoc_x Reward:%.4f\nTargetLoc_y Reward:%.4f\nTargetLoc_h Reward:%.4f\nTargetPos Reward:%.4f\nW Reward:%f\nTotal Reward:%.4f\n' %
+                (
+                    r_coord,
+                    r_coord,
+                    r_scale,
+                    r_height,
+                    r_orientation,
+                    reward,
+                )
+            )
+        return reward
+
+    def eval_reward_11(self, action):
+        """
+        Add penalty for large action variations 
+        """
+        if self._game_over():
+            return -10.0
+        r_coord, r_scale = self.goal_reward()
+        r_orientation = aux_func(numpy.array(
+            self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
+        r_height = aux_func(
+            self.quadcopter_pos[2] - self._goal_height, 0.5) * 0.5
+        past_actions = numpy.array(action).reshape(self._future_action_length, 4)
+        delta_actions = past_actions[1::] - past_actions[0:-1]
+        r_action = aux_func(delta_actions, 0.1) * 0.5
+        reward = r_coord + r_scale + r_orientation + r_height + r_action
+        if self._log:
+            logger.info(
+                'TargetLoc_x Reward:%.4f\nTargetLoc_y Reward:%.4f\nTargetLoc_h Reward:%.4f\nTargetPos Reward:%.4f\nW Reward:%f\nTotal Reward:%.4f\n' %
+                (
+                    r_coord,
+                    r_coord,
+                    r_scale,
+                    r_height,
+                    r_orientation,
+                    reward,
+                )
+            )
+        return reward
+
+    def eval_reward_12(self, action):
+        """
+        Add penalty for large action variations 
+        """
+        if self._game_over():
+            return -10.0
+        r_coord, r_scale = self.goal_reward()
+        r_orientation = aux_func(numpy.array(
+            self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
+        r_height = aux_func(
+            self.quadcopter_pos[2] - self._goal_height, 0.5) * 0.5
+        past_actions = numpy.array(self.actions)
+        cur_actions = action.reshape(self._future_action_length, 4)
+        past_actions = numpy.concatenate([past_actions, cur_actions])
+        delta_actions = past_actions[1::] - past_actions[0:-1]
+        r_action = aux_func(delta_actions, 0.1) * 0.5
+        reward = r_coord + r_scale + r_orientation + r_height + r_action
+        if self._log:
+            logger.info(
+                'TargetLoc_x Reward:%.4f\nTargetLoc_y Reward:%.4f\nTargetLoc_h Reward:%.4f\nTargetPos Reward:%.4f\nW Reward:%f\nTotal Reward:%.4f\n' %
+                (
+                    r_coord,
+                    r_coord,
+                    r_scale,
+                    r_height,
+                    r_orientation,
+                    reward,
+                )
+            )
+        return reward
+
+    def eval_reward_13(self, action):
+        """
+        Add penalty for large action accelerations
+        """
+        if self._game_over():
+            return -10.0
+        r_coord, r_scale = self.goal_reward()
+        r_orientation = aux_func(numpy.array(
+            self.quadcopter_orientation[0:2]) / numpy.pi - 0, 0.03) * 1.0
+        r_height = aux_func(
+            self.quadcopter_pos[2] - self._goal_height, 0.5) * 0.5
+        past_actions = numpy.array(self.actions)
+        r_action = aux_func(past_actions.mean(axis=0), 0.1)
+        delta_actions = past_actions[1::] - past_actions[0:-1]
+        r_action_delta = aux_func(delta_actions, 0.1) * 0.5
+        reward = r_coord + r_scale + r_orientation + \
+            r_height + r_action + r_action_delta
         if self._log:
             logger.info(
                 'TargetLoc_x Reward:%.4f\nTargetLoc_y Reward:%.4f\nTargetLoc_h Reward:%.4f\nTargetPos Reward:%.4f\nW Reward:%f\nTotal Reward:%.4f\n' %
@@ -393,23 +541,29 @@ class VREPEnv(VREPBaseEnv):
         for _ in range(self._state_history_length):
             self.states.append(obs)
         for _ in range(self._action_history_length):
-            self.actions.append(numpy.zeros(self.action_space.shape))
+            self.actions.append(numpy.zeros(4))
         return self._concat_state()
 
     def _step(self, a):
         reward = 0.0
         if self._log:
-            logger.info(
-                'OriginalAction:%.4f\t%.4f\t%.4f\t%.4f' % (
-                    a[0], a[1], a[2], a[3])
-            )
-        self.actions.append(a)
+            for k in range(self._future_action_length):
+                aa = a[k * 4:(k + 1) * 4]
+                logger.info(
+                    'OriginalAction:%.4f\t%.4f\t%.4f\t%.4f' % (
+                        aa[0], aa[1], aa[2], aa[3])
+                )
+        if self._future_action_length <= 1:
+            self.actions.append(a)
         if self._action_type == 'continuous':
             a = self._normalize_action(a)
         else:
             a = self.AVAILABLE_ACTION[a]
         for _ in range(self.frame_skip):
             reward += self._act(a)
+        if self._future_action_length > 1:
+            for k in range(self._future_action_length):
+                self.actions.append(a[k * 4: (k + 1) * 4])
         ob = self._get_obs()
 
         self.states.append(ob)
